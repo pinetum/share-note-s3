@@ -1,8 +1,15 @@
-# Share Note
+# Share Note S3
+
+A fork version of [Share Note](https://obsidian.md/plugins?id=share-note) that uses S3 service for storage.
+
+Tested service provider:
+- [x] Cloudflare R2
+- [x] MinIO
+
 
 Instantly share / publish a note. Notes are shared with your full theme and should look identical to how they look in your Obsidian vault.
 
-- 👉 [Install this plugin from the Plugin Store](https://obsidian.md/plugins?id=share-note)
+- 👉 [Install this plugin from the Plugin Store](https://obsidian.md/plugins?id=share-note-s3)
 - 📄 [Documentation](https://docs.note.sx/)
 - 💬 [Discussion for this plugin](https://forum.obsidian.md/t/42788)
 - 🚀 [Request new features / see the roadmap](https://note.sx/roadmap)
