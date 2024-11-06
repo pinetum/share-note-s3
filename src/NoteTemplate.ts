@@ -40,8 +40,9 @@ export default class NoteTemplate {
 
 
 export function generateFullyHtml(note: NoteTemplate) {
-  console.log('[NoteTemplate] Generating HTML for note', note)
+  console.log('[NoteTemplate] Generating HTML for note ' + note.filename)
   let htmlContent = ''
+  let bodyClasses = note.elements.find(e => e.element === 'body')?.classes.join(' ') || '';
   let encryptedContent = ''
   if (note.encrypted) encryptedContent = note.content
   else htmlContent = note.content
@@ -97,10 +98,18 @@ export function generateFullyHtml(note: NoteTemplate) {
     document.body.classList.toggle('theme-dark')
     document.body.classList.toggle('theme-light')
   }
+    JSON.parse(document.getElementById('element-styles').innerHTML).forEach((e)=>{
+      const el = document.querySelector(e.element);
+      if(el){
+        el.setAttribute('class', e.classes.join(' '));
+        el.setAttribute('style', e.style);
+      }
+      
+    })
 }</script>
     
 </head>
-<body>
+<body class="${bodyClasses}">
 <div class="app-container">
     <div class="horizontal-main-container">
         <div class="workspace">

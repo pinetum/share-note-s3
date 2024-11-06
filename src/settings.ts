@@ -25,10 +25,11 @@ export enum YamlField {
 
 export interface ShareSettings {
   s3URL: string;
-	s3AccessKey: string;
-	s3AccessId: string;
-	bucket: string;
-	publicBaseURL: string;
+  s3AccessKey: string;
+  s3AccessId: string;
+  s3Region: string;
+  bucket: string;
+  publicBaseURL: string;
   uid: string;
   yamlField: string;
   noteWidth: string;
@@ -39,17 +40,17 @@ export interface ShareSettings {
   expiry: string;
   clipboard: boolean;
   shareUnencrypted: boolean;
-  authRedirect: string | null;
   debug: number;
   cssurl: string;
 }
 
 export const DEFAULT_SETTINGS: ShareSettings = {
   s3URL: '',
-	s3AccessKey: '',
-	s3AccessId: '',
-	bucket: '',
-	publicBaseURL: '',
+  s3AccessKey: '',
+  s3Region: 'auto',
+  s3AccessId: '',
+  bucket: '',
+  publicBaseURL: '',
   uid: '',
   yamlField: 'share',
   noteWidth: '',
@@ -60,7 +61,6 @@ export const DEFAULT_SETTINGS: ShareSettings = {
   expiry: '',
   clipboard: true,
   shareUnencrypted: false,
-  authRedirect: null,
   debug: 0,
   cssurl: ''
 }
@@ -69,91 +69,102 @@ export class ShareSettingsTab extends PluginSettingTab {
   plugin: SharePlugin
   apikeyEl: TextComponent
 
-  constructor (app: App, plugin: SharePlugin) {
+  constructor(app: App, plugin: SharePlugin) {
     super(app, plugin)
     this.plugin = plugin
   }
 
-  display (): void {
+  display(): void {
     const { containerEl } = this
 
     containerEl.empty()
-
+    new Setting(containerEl)
+      .setName('S3 API settings')
+      .setHeading();
     // API key
     new Setting(containerEl)
-			.setName('S3 API URL')
-			.setDesc('Your S3 API URL')
-			.addText(text => text
-				.setPlaceholder('https://s3.amazonaws.com....')
-				.setValue(this.plugin.settings.s3URL)
-				.onChange(async (value) => {
-					this.plugin.settings.s3URL = value;
-					await this.plugin.saveSettings();
-				}));
+      .setName('S3 API URL')
+      .setDesc('Your S3 API URL')
+      .addText(text => text
+        .setPlaceholder('https://s3.amazonaws.com....')
+        .setValue(this.plugin.settings.s3URL)
+        .onChange(async (value) => {
+          this.plugin.settings.s3URL = value;
+          await this.plugin.saveSettings();
+        }));
+        new Setting(containerEl)
+        .setName('S3 API Region')
+        .setDesc('Your S3 API region')
+        .addText(text => text
+          .setPlaceholder('auto')
+          .setValue(this.plugin.settings.s3Region)
+          .onChange(async (value) => {
+            this.plugin.settings.s3Region = value;
+            await this.plugin.saveSettings();
+          }));
 
-		new Setting(containerEl)
-			.setName('S3 API Access ID')
-			.setDesc('Your S3 API Access ID')
-			.addText(text => text
-				.setPlaceholder('Access ID')
-				.setValue(this.plugin.settings.s3AccessId)
-				.onChange(async (value) => {
-					this.plugin.settings.s3AccessId = value;
-					await this.plugin.saveSettings();
-				})
-			);
-		new Setting(containerEl)
-			.setName('S3 API Access Key')
-			.setDesc('Your S3 API Access Key')
-			.addText(text => text
-				.setPlaceholder('Access Key')
-				.setValue(this.plugin.settings.s3AccessKey)
-				.onChange(async (value) => {
-					this.plugin.settings.s3AccessKey = value;
-					await this.plugin.saveSettings();
-				})
-			);
-		new Setting(containerEl)
-			.setName('S3 Bucket')
-			.setDesc('Your S3 Bucket')
-			.addText(text => text
-				.setPlaceholder('Bucket')
-				.setValue(this.plugin.settings.bucket)
-				.onChange(async (value) => {
-					this.plugin.settings.bucket = value;
-					await this.plugin.saveSettings();
-				})
-			);
-		new Setting(containerEl)
-			.setName('Public Base URL')
-			.setDesc('Your S3 Public Base URL')
-			.addText(text => text
-				.setPlaceholder('https://....')
-				.setValue(this.plugin.settings.publicBaseURL)
-				.onChange(async (value) => {
-					this.plugin.settings.publicBaseURL = value;
-					await this.plugin.saveSettings();
-				})
-			);
-    // new Setting(containerEl)
-    //   .setName('API key')
-    //   .setDesc('Click the button to request a new API key')
-    //   .addButton(btn => btn
-    //     .setButtonText('Connect plugin')
-    //     .setCta()
-    //     .onClick(() => {
-    //       window.open(this.plugin.settings.server + '/v1/account/get-key?id=' + this.plugin.settings.uid)
-    //     }))
-    //   .addText(inputEl => {
-    //     this.apikeyEl = inputEl // so we can update it with the API key during the URI callback
-    //     inputEl
-    //       .setPlaceholder('API key')
-    //       .setValue(this.plugin.settings.apiKey)
-    //       .onChange(async (value) => {
-    //         this.plugin.settings.apiKey = value
-    //         await this.plugin.saveSettings()
-    //       })
-    //   })
+    new Setting(containerEl)
+      .setName('S3 API Access ID')
+      .setDesc('Your S3 API Access ID')
+      .addText(text => text
+        .setPlaceholder('Access ID')
+        .setValue(this.plugin.settings.s3AccessId)
+        .onChange(async (value) => {
+          this.plugin.settings.s3AccessId = value;
+          await this.plugin.saveSettings();
+        })
+      );
+    new Setting(containerEl)
+      .setName('S3 API Access Key')
+      .setDesc('Your S3 API Access Key')
+      .addText(text => text
+        .setPlaceholder('Access Key')
+        .setValue(this.plugin.settings.s3AccessKey)
+        .onChange(async (value) => {
+          this.plugin.settings.s3AccessKey = value;
+          await this.plugin.saveSettings();
+        })
+      );
+    new Setting(containerEl)
+      .setName('S3 Bucket')
+      .setDesc('Your S3 Bucket')
+      .addText(text => text
+        .setPlaceholder('Bucket')
+        .setValue(this.plugin.settings.bucket)
+        .onChange(async (value) => {
+          this.plugin.settings.bucket = value;
+          await this.plugin.saveSettings();
+        })
+      );
+    new Setting(containerEl)
+      .setName('Public Base URL')
+      .setDesc('Your S3 Public Base URL')
+      .addText(text => text
+        .setPlaceholder('https://....')
+        .setValue(this.plugin.settings.publicBaseURL)
+        .onChange(async (value) => {
+          this.plugin.settings.publicBaseURL = value;
+          await this.plugin.saveSettings();
+        })
+      );
+    new Setting(containerEl)
+      .setName('S3 API test')
+      .setDesc('Test your S3 API connection')
+      .addButton(btn => btn
+        .setButtonText('Test connection')
+        .setCta()
+        .onClick(() => {
+          this.plugin.checkAuth()
+        }));
+
+    new Setting(containerEl)
+      .setName(`Troubleshooting`)
+      .setDesc('If connection is failed, please check your S3 API CORS Policy.')
+      .then(setting => addDocs(setting, 'https://docs.note.sx/notes/theme'))
+
+    new Setting(containerEl)
+      .setName('Upload options')
+      .setHeading()
 
     // Local YAML field
     new Setting(containerEl)
@@ -166,10 +177,6 @@ export class ShareSettingsTab extends PluginSettingTab {
           this.plugin.settings.yamlField = value || DEFAULT_SETTINGS.yamlField
           await this.plugin.saveSettings()
         }))
-
-    new Setting(containerEl)
-      .setName('Upload options')
-      .setHeading()
 
     new Setting(containerEl)
       .setName(`⭐ Your shared note theme is "${this.plugin.settings.theme || 'Obsidian default theme'}"`)
@@ -301,7 +308,7 @@ export class ShareSettingsTab extends PluginSettingTab {
   }
 }
 
-function addDocs (setting: Setting, url: string) {
+function addDocs(setting: Setting, url: string) {
   setting.descEl.createEl('br')
   setting.descEl.createEl('a', {
     text: 'View the documentation',

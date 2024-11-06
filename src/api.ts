@@ -5,7 +5,6 @@ import { sha1, sha256 } from './crypto'
 import NoteTemplate from './NoteTemplate'
 import { SharedUrl } from './note'
 import { compressImage } from './Compressor'
-import S3API from 's3API'
 import { url } from 'inspector'
 import * as path from 'path'
 
@@ -113,7 +112,6 @@ export default class API {
   }
 
   async postRaw(data: FileUpload, retries = 4) {
-    const s3API = new S3API(this.plugin.settings.s3URL, this.plugin.settings.bucket, this.plugin.settings.s3AccessId, this.plugin.settings.s3AccessKey)
     const headers: HeadersInit = {
       // ...(await this.authHeaders()),
       'x-sharenote-filetype': data.filetype,
@@ -123,15 +121,13 @@ export default class API {
       let s3Result = null;
       if (data.byteLength) headers['x-sharenote-bytelength'] = data.byteLength.toString()
       if (data.themeAsset) {
-        s3Result = await s3API.uploadThemeAssets(data)
+        s3Result = await this.plugin.s3Api.uploadThemeAssets(data)
       }
-      else if (data.noteAttachment) {
-        s3Result = await s3API.uploadNoteAttachment(data)
-      } else {
-        s3Result = await s3API.uploadNote(data)
+      else { // attachments.
+        s3Result = await this.plugin.s3Api.uploadNoteAttachment(data)
       }
       if (s3Result && s3Result.success && s3Result.url)
-        
+
         return { url: new URL(s3Result.url, this.plugin.settings.publicBaseURL).href }
       if (s3Result && s3Result.success === false) {
         let message = "S3 upload failed, retry upload..." + s3Result.error
@@ -144,34 +140,6 @@ export default class API {
       retries--
     }
     throw new Error('Upload error')
-    // const res = await s3API.uploadFile(data.hash, data.content, { filetype: data.filetype }, data.filetype)
-    // return { url: 'https://dummy.com/123jk' }
-    // while (retries > 0) {
-    // const res = await s3API.uploadFile(data.hash, data.content, { filetype: data.filetype }, data.filetype)
-    // const res = await fetch(this.plugin.settings.server + endpoint, {
-    //   method: 'POST',
-    //   headers,
-    //   body: data.content
-    // })
-    // if (res.status !== 200) {
-    //   if (res.status < 500 || retries <= 1) {
-    //     const message = await res.text()
-    //     if (message) {
-    //       new StatusMessage(message, StatusType.Error)
-    //       throw new Error('Known error')
-    //     }
-    //     throw new Error('Unknown error')
-    //   }
-    //   // Delay before attempting to retry upload
-    //   await new Promise(resolve => setTimeout(resolve, 1000))
-    // } else {
-    //   return res.json()
-    // }
-    // console.log(res)
-    // return res;
-    // console.log('Retrying ' + retries)
-    // retries--
-    // }
   }
 
   async queueUpload(item: UploadQueueItem) {
@@ -190,56 +158,40 @@ export default class API {
   async processQueue(status: StatusMessage, type = 'attachment') {
     const res = {
       success: true,
-      files: [],
-      css: {
-        url: '',
-        hash: ''
-      }
+      files: [] as string[]
     }
-    // TODO: check s3 for existing files
-    // Check with the server to find which files need to be updated
-    // const res = await this.post('/v1/file/check-files', {
-    //   files: this.uploadQueue.map(x => {
-    //     return {
-    //       hash: x.data.hash,
-    //       filetype: x.data.filetype,
-    //       byteLength: x.data.byteLength
-    //     }
-    //   })
-    // }) as CheckFilesResult
-
     let count = 1
     const promises: Promise<void>[] = []
     for (const queueItem of this.uploadQueue) {
-      // Get the result from check-files (if exists)
-      // const checkFile = res?.files.find((item: FileUpload) => item.hash === queueItem.data.hash && item.filetype === queueItem.data.filetype)
-      if (false) {
-        // TOFO: check if file exists in s3
-        // if (checkFile?.url) {
-        // File is already uploaded, just process the callback
-        // status.setStatus(`Uploading ${type} ${count++} of ${this.uploadQueue.length}...`)
-        // queueItem.callback(checkFile.url)
-      } else {
-        // File needs to be uploaded
-        promises.push(new Promise(resolve => {
-          this.postRaw(queueItem.data)
-            .then((res) => {
-              // Process the callback
-              status.setStatus(`Uploading ${type} ${count++} of ${this.uploadQueue.length}...`)
-              console.log(`Uploading ${type} ${count++} of ${this.uploadQueue.length}..${res.url}`)
-              queueItem.callback(res.url)
-              resolve()
-            })
-            .catch((e) => {
-              console.log(e)
-              resolve()
-            })
-        }))
+      if (queueItem.data.noteAttachment) {
+        // check if file exists in s3
+        const url = await this.plugin.s3Api.objectExists(queueItem.data)
+        if (url) {
+          const fullUrl = new URL(url, this.plugin.settings.publicBaseURL).href
+          res.files.push(fullUrl)
+          queueItem.callback(fullUrl);
+          continue;
+        }
       }
+      promises.push(new Promise(resolve => {
+        this.postRaw(queueItem.data)
+          .then((pres) => {
+            // Process the callback
+            status.setStatus(`Uploading ${type} ${count++} of ${this.uploadQueue.length}...`)
+            console.log(`Uploading ${type} ${count++} of ${this.uploadQueue.length}..${pres.url}`)
+            queueItem.callback(pres.url)
+            res.files.push(pres.url)
+            resolve()
+          })
+          .catch((e) => {
+            res.success = false
+            console.log(e)
+            resolve()
+          })
+      }))
     }
     await Promise.all(promises)
     this.uploadQueue = []
-
     return res
   }
 
@@ -249,25 +201,19 @@ export default class API {
   }
 
   async createNote(template: NoteTemplate, noteShareId: string, expiration?: number) {
-    // const res = await this.post('/v1/file/create-note', {
-    //   filename: template.filename,
-    //   filetype: 'html',
-    //   hash: await sha1(template.content),
-    //   expiration,
-    //   template
-    // }, 3)
-    // console.log('[createNote]', template)
-    const s3API = new S3API(this.plugin.settings.s3URL, this.plugin.settings.bucket, this.plugin.settings.s3AccessId, this.plugin.settings.s3AccessKey)
     template.filename = noteShareId
-    const { success, url } = await s3API.uploadNote(template)
-    
-    return new URL(url, this.plugin.settings.publicBaseURL).href
+    const { success, url } = await this.plugin.s3Api.uploadNote(template)
+    if (success && url) {
+      return new URL(url, this.plugin.settings.publicBaseURL).href
+    } else {
+      throw new Error('Failed to upload note')
+    }
+
   }
 
   async deleteSharedNote(shareNoteId: string) {
-    if (url) {
-      const s3API = new S3API(this.plugin.settings.s3URL, this.plugin.settings.bucket, this.plugin.settings.s3AccessId, this.plugin.settings.s3AccessKey)
-      await s3API.deleteNote(shareNoteId)
+    if (shareNoteId) {
+      await this.plugin.s3Api.deleteNote(shareNoteId)
       new StatusMessage('The note has been deleted 🗑️', StatusType.Info)
     }
   }

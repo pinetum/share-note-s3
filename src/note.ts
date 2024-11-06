@@ -10,6 +10,7 @@ import { CheckFilesResult, parseExistingShareUrl } from './api'
 import { minify } from 'csso'
 import { nanoid } from 'nanoid'
 import DurationConstructor = moment.unitOfTime.DurationConstructor
+import S3API from 's3API'
 
 const cssAttachmentWhitelist: { [key: string]: string[] } = {
   ttf: ['font/ttf', 'application/x-font-ttf', 'application/x-font-truetype', 'font/truetype'],
@@ -243,8 +244,7 @@ export default class Note {
     this.expiration = this.getExpiration()
 
     // Process CSS and images
-    const uploadResult = await this.processMedia()
-    this.cssResult = uploadResult.css
+    await this.processMedia()
     await this.processCss()
 
     /*
@@ -411,7 +411,10 @@ export default class Note {
     // Upload the main CSS file only if the user has asked for it.
     // We do it this way to ensure that the CSS the user wants on the server
     // stays that way, until they ASK to overwrite it.
-    if (this.isForceUpload || !this.cssResult) {
+    const themeName = this.plugin.app?.customCss?.theme || '';
+    const existsTheme = await this.plugin.s3Api.objectExists({ filetype: 'css', themeAsset: true, themeName: themeName, hash: '', byteLength: 0 })
+    if (this.isForceUpload || !existsTheme) {
+      console.log('[upload css assets] for theme ', themeName)
       // Extract any attachments from the CSS.
       // Will use the mime-type whitelist to determine which attachments to extract.
       this.status.setStatus('Processing CSS...')
@@ -476,12 +479,11 @@ export default class Note {
         }
       }
       this.status.setStatus('Uploading CSS attachments...')
-      console.log('[upload css assets]', this.css)
       await this.plugin.api.processQueue(this.status, 'CSS attachment')
       this.status.setStatus('Uploading CSS...')
       const minified = minify(this.css).css
       const cssHash = await sha1(minified)
-      const themeName = this.plugin.app?.customCss?.theme || '';
+
       try {
         if (cssHash !== this.cssResult?.hash) {
           let cssurl = await this.plugin.api.upload({

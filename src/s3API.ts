@@ -6,21 +6,21 @@ import {
   GetObjectCommand,
   PutObjectCommand,
   DeleteObjectCommand,
+  HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import { FileUpload } from "api";
 import mime from 'mime'
-import { nanoid } from 'nanoid'
 import NoteTemplate, { generateFullyHtml } from "NoteTemplate";
 
 export default class S3API {
   private client: S3Client;
   private bucket: string;
 
-  constructor(endpoint: string, bucket: string, accessKeyId: string, secretAccessKey: string) {
+  constructor(endpoint: string, bucket: string, accessKeyId: string, secretAccessKey: string, region?: string) {
     // console.log('[S3API] Initializing S3 API', endpoint, bucket, accessKeyId, secretAccessKey);
     this.bucket = bucket;
     this.client = new S3Client({
-      region: "auto",
+      region: region || "auto",
       endpoint: endpoint,
       forcePathStyle: true,
       credentials: {
@@ -31,7 +31,7 @@ export default class S3API {
     });
   }
 
-  async #listBuckets() {
+  async listBuckets() {
     return await this.client.send(new ListBucketsCommand({}));
   }
 
@@ -59,21 +59,22 @@ export default class S3API {
     return await this.client.send(new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body }));
   }
 
-  // async uploadNote(key: string, body: string) {
-  //   let noteShareId = nanoid();
-
-  // }
-
 
   #getMimeType(fileExt: string) {
     return mime.getType(fileExt) as string;
   }
 
+  #getFilePath(data: FileUpload) {
+    if (data.themeAsset) {
+      return `assets/${data.themeName ? data.themeName : data.hash}.${data.filetype}`;
+    }
+    else {
+      // note attachments
+      return `notes/${data.noteId}/attachs/${data.hash}.${data.filetype}`;
+    }
+  }
+
   async #uploadFile(filePath: string, body: any, metadata: any, mimeType?: string) {
-    // console.log('[S3API][Uploading file]', filePath);
-    // const mimeType = mime.getType(fileExt) as string;
-    // let fileShareId = nanoid();
-    // let fileKey = `test/${key}.${fileExt}`;
     return this.client.send(new PutObjectCommand({
       Bucket: this.bucket,
       Key: filePath,
@@ -84,8 +85,18 @@ export default class S3API {
 
   }
 
+  async objectExists(data: FileUpload) {
+    try {
+      const key = this.#getFilePath(data);
+      await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+      return key;
+    } catch (e) {
+      return null;
+    }
+  }
+
   async uploadThemeAssets(data: FileUpload) {
-    const filePath = `assets/${data.themeName ? data.themeName : data.hash}.${data.filetype}`;
+    const filePath = this.#getFilePath(data);
     console.log('[S3API][Upload Theme Assets]' + filePath);
     try {
       const res = await this.#uploadFile(filePath, data.content, { hash: data.hash });
@@ -109,33 +120,8 @@ export default class S3API {
 
   }
   async uploadNoteAttachment(data: FileUpload) {
-    const filePath = `notes/${data.noteId}/attachs/${data.hash}.${data.filetype}`;
+    const filePath = this.#getFilePath(data);
     console.log('[S3API][uploadNoteAttachment]' + filePath);
-    try {
-      const res = await this.#uploadFile(filePath, data.content, { hash: data.hash });
-      if (res.$metadata.httpStatusCode !== 200) {
-        return {
-          success: false,
-          error: res
-        }
-      }
-      return {
-        success: true,
-        url: filePath
-      }
-    } catch (error) {
-      console.error('[S3API] Error uploading theme assets', error);
-      return {
-        success: false,
-        error: error
-      }
-    }
-  }
-
-  async uploadNoteFromFile(data: FileUpload) {
-
-    const filePath = `notes/${data.noteId}.html`;
-    console.log('[S3API][uploadNoteFromFile]' + filePath);
     try {
       const res = await this.#uploadFile(filePath, data.content, { hash: data.hash });
       if (res.$metadata.httpStatusCode !== 200) {
@@ -186,4 +172,10 @@ export default class S3API {
     await this.#deleteDirectory(`notes/${noteShareId}/attachs`);
     await this.#deleteObject(`notes/${noteShareId}.html`);
   }
+
+  async putObjectTest() {
+    return await this.#uploadFile("TEST", "TEST", { hash: "TEST" });
+  }
+
+
 }
