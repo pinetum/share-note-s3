@@ -17,7 +17,6 @@ export default class S3API {
   private bucket: string;
 
   constructor(endpoint: string, bucket: string, accessKeyId: string, secretAccessKey: string, region?: string) {
-    // console.log('[S3API] Initializing S3 API', endpoint, bucket, accessKeyId, secretAccessKey);
     this.bucket = bucket;
     this.client = new S3Client({
       region: region || "auto",
@@ -36,7 +35,7 @@ export default class S3API {
   }
 
   async #deleteObject(key: string) {
-    console.log('[S3API][Delete Object]', key);
+    // console.log('[S3API][Delete Object]', key);
     return await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
@@ -97,7 +96,7 @@ export default class S3API {
 
   async uploadThemeAssets(data: FileUpload) {
     const filePath = this.#getFilePath(data);
-    console.log('[S3API][Upload Theme Assets]' + filePath);
+    // console.log('[S3API][Upload Theme Assets]' + filePath);
     try {
       const res = await this.#uploadFile(filePath, data.content, { hash: data.hash });
       if (res.$metadata.httpStatusCode !== 200) {
@@ -121,7 +120,7 @@ export default class S3API {
   }
   async uploadNoteAttachment(data: FileUpload) {
     const filePath = this.#getFilePath(data);
-    console.log('[S3API][uploadNoteAttachment]' + filePath);
+    // console.log('[S3API][uploadNoteAttachment]' + filePath);
     try {
       const res = await this.#uploadFile(filePath, data.content, { hash: data.hash });
       if (res.$metadata.httpStatusCode !== 200) {
@@ -146,7 +145,7 @@ export default class S3API {
   async uploadNote(note: NoteTemplate) {
 
     const filePath = `notes/${note.filename}.html`;
-    console.log('[S3API][Upload Note]' + filePath);
+    // console.log('[S3API][Upload Note]' + filePath);
     try {
       const res = await this.#uploadFile(filePath, generateFullyHtml(note), { hash: note.filename });
       if (res.$metadata.httpStatusCode !== 200) {

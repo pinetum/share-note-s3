@@ -126,7 +126,7 @@ export default class Note {
           }))
       this.css = this.cssRules.map(rule => rule.cssText).join('').replace(/\n/g, '')
     } catch (e) {
-      console.log(e)
+      console.error(e)
       this.status.hide()
       new StatusMessage('Failed to parse current note, check console for details', StatusType.Error)
       return
@@ -414,7 +414,7 @@ export default class Note {
     const themeName = this.plugin.app?.customCss?.theme || '';
     const existsTheme = await this.plugin.s3Api.objectExists({ filetype: 'css', themeAsset: true, themeName: themeName, hash: '', byteLength: 0 })
     if (this.isForceUpload || !existsTheme) {
-      console.log('[upload css assets] for theme ', themeName)
+      // console.log('[upload css assets] for theme ', themeName)
       // Extract any attachments from the CSS.
       // Will use the mime-type whitelist to determine which attachments to extract.
       this.status.setStatus('Processing CSS...')

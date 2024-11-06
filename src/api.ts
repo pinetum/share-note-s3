@@ -64,53 +64,6 @@ export default class API {
     }
   }
 
-  async post(endpoint: string, data?: PostData, retries = 1) {
-    console.log('POST', endpoint, data)
-    // const headers: HeadersInit = {
-    //   ...(await this.authHeaders()),
-    //   'Content-Type': 'application/json'
-    // }
-    // if (data?.byteLength) headers['x-sharenote-bytelength'] = data.byteLength.toString()
-    // const body = Object.assign({}, data)
-    // if (this.plugin.settings.debug) body.debug = this.plugin.settings.debug
-
-    // // Upload the data
-    // while (retries > 0) {
-    //   try {
-    //     const res = await requestUrl({
-    //       url: this.plugin.settings.server + endpoint,
-    //       method: 'POST',
-    //       headers,
-    //       body: JSON.stringify(body)
-    //     })
-    //     if (this.plugin.settings.debug === 1 && data?.filetype === 'html') {
-    //       // Debugging option
-    //       console.log(res.json.html)
-    //     }
-    //     return res.json
-    //   } catch (error) {
-    //     if (error.status < 500 || retries <= 1) {
-    //       const message = error.headers?.message
-    //       if (message) {
-    //         if (error.status === 462) {
-    //           // Invalid API key, request a new one
-    //           this.plugin.authRedirect('share').then()
-    //         } else {
-    //           new StatusMessage(message, StatusType.Error)
-    //         }
-    //         throw new Error('Known error')
-    //       }
-    //       throw new Error('Unknown error')
-    //     } else {
-    //       // Delay before attempting to retry upload
-    //       await new Promise(resolve => setTimeout(resolve, 1000))
-    //     }
-    //   }
-    //   console.log('Retrying ' + retries)
-    //   retries--
-    // }
-  }
-
   async postRaw(data: FileUpload, retries = 4) {
     const headers: HeadersInit = {
       // ...(await this.authHeaders()),
@@ -178,14 +131,14 @@ export default class API {
           .then((pres) => {
             // Process the callback
             status.setStatus(`Uploading ${type} ${count++} of ${this.uploadQueue.length}...`)
-            console.log(`Uploading ${type} ${count++} of ${this.uploadQueue.length}..${pres.url}`)
+            // console.log(`Uploading ${type} ${count++} of ${this.uploadQueue.length}..${pres.url}`)
             queueItem.callback(pres.url)
             res.files.push(pres.url)
             resolve()
           })
           .catch((e) => {
             res.success = false
-            console.log(e)
+            console.error(e)
             resolve()
           })
       }))

@@ -21,7 +21,7 @@ export function getElementStyle(key: string, element: HTMLElement) {
     }
     elementStyle.style = style.cssText
   } catch (e) {
-    console.log(e)
+    console.error(e)
   }
   return elementStyle
 }
@@ -40,7 +40,7 @@ export default class NoteTemplate {
 
 
 export function generateFullyHtml(note: NoteTemplate) {
-  console.log('[NoteTemplate] Generating HTML for note ' + note.filename)
+  // console.log('[NoteTemplate] Generating HTML for note ' + note.filename)
   let htmlContent = ''
   let bodyClasses = note.elements.find(e => e.element === 'body')?.classes.join(' ') || '';
   let encryptedContent = ''
