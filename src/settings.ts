@@ -19,16 +19,19 @@ export enum YamlField {
   encrypted,
   unencrypted,
   title,
-  expires
+  expires,
+  shareId
 }
 
 export interface ShareSettings {
-  server: string;
+  s3URL: string;
+	s3AccessKey: string;
+	s3AccessId: string;
+	bucket: string;
+	publicBaseURL: string;
   uid: string;
-  apiKey: string;
   yamlField: string;
   noteWidth: string;
-  theme: string; // The name of the theme stored on the server
   themeMode: ThemeMode;
   titleSource: TitleSource;
   removeYaml: boolean;
@@ -38,15 +41,18 @@ export interface ShareSettings {
   shareUnencrypted: boolean;
   authRedirect: string | null;
   debug: number;
+  cssurl: string;
 }
 
 export const DEFAULT_SETTINGS: ShareSettings = {
-  server: 'https://api.note.sx',
+  s3URL: '',
+	s3AccessKey: '',
+	s3AccessId: '',
+	bucket: '',
+	publicBaseURL: '',
   uid: '',
-  apiKey: '',
   yamlField: 'share',
   noteWidth: '',
-  theme: '',
   themeMode: ThemeMode['Same as theme'],
   titleSource: TitleSource['Note title'],
   removeYaml: true,
@@ -55,7 +61,8 @@ export const DEFAULT_SETTINGS: ShareSettings = {
   clipboard: true,
   shareUnencrypted: false,
   authRedirect: null,
-  debug: 0
+  debug: 0,
+  cssurl: ''
 }
 
 export class ShareSettingsTab extends PluginSettingTab {
@@ -74,24 +81,79 @@ export class ShareSettingsTab extends PluginSettingTab {
 
     // API key
     new Setting(containerEl)
-      .setName('API key')
-      .setDesc('Click the button to request a new API key')
-      .addButton(btn => btn
-        .setButtonText('Connect plugin')
-        .setCta()
-        .onClick(() => {
-          window.open(this.plugin.settings.server + '/v1/account/get-key?id=' + this.plugin.settings.uid)
-        }))
-      .addText(inputEl => {
-        this.apikeyEl = inputEl // so we can update it with the API key during the URI callback
-        inputEl
-          .setPlaceholder('API key')
-          .setValue(this.plugin.settings.apiKey)
-          .onChange(async (value) => {
-            this.plugin.settings.apiKey = value
-            await this.plugin.saveSettings()
-          })
-      })
+			.setName('S3 API URL')
+			.setDesc('Your S3 API URL')
+			.addText(text => text
+				.setPlaceholder('https://s3.amazonaws.com....')
+				.setValue(this.plugin.settings.s3URL)
+				.onChange(async (value) => {
+					this.plugin.settings.s3URL = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('S3 API Access ID')
+			.setDesc('Your S3 API Access ID')
+			.addText(text => text
+				.setPlaceholder('Access ID')
+				.setValue(this.plugin.settings.s3AccessId)
+				.onChange(async (value) => {
+					this.plugin.settings.s3AccessId = value;
+					await this.plugin.saveSettings();
+				})
+			);
+		new Setting(containerEl)
+			.setName('S3 API Access Key')
+			.setDesc('Your S3 API Access Key')
+			.addText(text => text
+				.setPlaceholder('Access Key')
+				.setValue(this.plugin.settings.s3AccessKey)
+				.onChange(async (value) => {
+					this.plugin.settings.s3AccessKey = value;
+					await this.plugin.saveSettings();
+				})
+			);
+		new Setting(containerEl)
+			.setName('S3 Bucket')
+			.setDesc('Your S3 Bucket')
+			.addText(text => text
+				.setPlaceholder('Bucket')
+				.setValue(this.plugin.settings.bucket)
+				.onChange(async (value) => {
+					this.plugin.settings.bucket = value;
+					await this.plugin.saveSettings();
+				})
+			);
+		new Setting(containerEl)
+			.setName('Public Base URL')
+			.setDesc('Your S3 Public Base URL')
+			.addText(text => text
+				.setPlaceholder('https://....')
+				.setValue(this.plugin.settings.publicBaseURL)
+				.onChange(async (value) => {
+					this.plugin.settings.publicBaseURL = value;
+					await this.plugin.saveSettings();
+				})
+			);
+    // new Setting(containerEl)
+    //   .setName('API key')
+    //   .setDesc('Click the button to request a new API key')
+    //   .addButton(btn => btn
+    //     .setButtonText('Connect plugin')
+    //     .setCta()
+    //     .onClick(() => {
+    //       window.open(this.plugin.settings.server + '/v1/account/get-key?id=' + this.plugin.settings.uid)
+    //     }))
+    //   .addText(inputEl => {
+    //     this.apikeyEl = inputEl // so we can update it with the API key during the URI callback
+    //     inputEl
+    //       .setPlaceholder('API key')
+    //       .setValue(this.plugin.settings.apiKey)
+    //       .onChange(async (value) => {
+    //         this.plugin.settings.apiKey = value
+    //         await this.plugin.saveSettings()
+    //       })
+    //   })
 
     // Local YAML field
     new Setting(containerEl)

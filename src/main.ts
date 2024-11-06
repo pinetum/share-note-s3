@@ -24,11 +24,6 @@ export default class SharePlugin extends Plugin {
       this.settings.uid = await shortHash('' + Date.now() + Math.random())
       await this.saveSettings()
     }
-    if (this.settings.server === 'https://api.obsidianshare.com') {
-      // Migrate to new server
-      this.settings.server = 'https://api.note.sx'
-      await this.saveSettings()
-    }
     this.settingsPage = new ShareSettingsTab(this.app, this)
     this.addSettingTab(this.settingsPage)
 
@@ -39,9 +34,10 @@ export default class SharePlugin extends Plugin {
     // To get an API key, we send the user to a Cloudflare Turnstile page to verify they are a human,
     // as a way to prevent abuse. The key is then sent back to Obsidian via this URI handler.
     // This way we do not require any personal data from the user like an email address.
+    // TODO: check for s3 connection
     this.registerObsidianProtocolHandler('share-note', async (data) => {
       if (data.action === 'share-note' && data.key) {
-        this.settings.apiKey = data.key
+        // this.settings.apiKey = data.key
         await this.saveSettings()
         if (this.settingsPage.apikeyEl) {
           // Live-update of the settings page input field
@@ -143,7 +139,8 @@ export default class SharePlugin extends Plugin {
     const file = this.app.workspace.getActiveFile()
     if (file instanceof TFile) {
       const meta = this.app.metadataCache.getFileCache(file)
-      const note = new Note(this)
+      const shareNoteId = meta?.frontmatter?.[this.settings.yamlField + '_' + YamlField[YamlField.shareId]]
+      const note = new Note(this, shareNoteId)
 
       if (this.settings.shareUnencrypted) {
         // The user has opted to share unencrypted by default
@@ -204,11 +201,12 @@ export default class SharePlugin extends Plugin {
         'Are you sure you want to delete this shared note and the shared link? This will not delete your local note.',
         async () => {
           new StatusMessage('Deleting note...')
-          await this.api.deleteSharedNote(sharedFile.url)
+          await this.api.deleteSharedNote(sharedFile.shareNoteId)
           await this.app.fileManager.processFrontMatter(sharedFile.file, (frontmatter) => {
             // Remove the shared link
             delete frontmatter[this.field(YamlField.link)]
             delete frontmatter[this.field(YamlField.updated)]
+            delete frontmatter[this.field(YamlField.shareId)]
           })
         })
     }
@@ -279,10 +277,12 @@ export default class SharePlugin extends Plugin {
     if (file) {
       const meta = this.app.metadataCache.getFileCache(file)
       const shareLink = meta?.frontmatter?.[this.settings.yamlField + '_' + YamlField[YamlField.link]]
+      const shareNoteId = meta?.frontmatter?.[this.settings.yamlField + '_' + YamlField[YamlField.shareId]]
       if (shareLink && parseExistingShareUrl(shareLink)) {
         return {
           file,
-          ...parseExistingShareUrl(shareLink)
+          ...parseExistingShareUrl(shareLink),
+          shareNoteId
         } as SharedNote
       }
     }

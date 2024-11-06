@@ -8,6 +8,7 @@ import { dataUriToBuffer } from 'data-uri-to-buffer'
 import FileTypes from './libraries/FileTypes'
 import { CheckFilesResult, parseExistingShareUrl } from './api'
 import { minify } from 'csso'
+import { nanoid } from 'nanoid'
 import DurationConstructor = moment.unitOfTime.DurationConstructor
 
 const cssAttachmentWhitelist: { [key: string]: string[] } = {
@@ -22,6 +23,7 @@ export interface SharedUrl {
   filename: string
   decryptionKey: string
   url: string
+  shareNoteId: string
 }
 
 export interface SharedNote extends SharedUrl {
@@ -64,8 +66,9 @@ export default class Note {
   template: NoteTemplate
   elements: ElementStyle[]
   expiration?: number
+  noteShareId: string
 
-  constructor (plugin: SharePlugin) {
+  constructor(plugin: SharePlugin, existNoteId?: string) {
     this.plugin = plugin
     // .getLeaf() doesn't return a `previewMode` property when a note is pinned,
     // so use the undocumented .getActiveFileView() which seems to work fine
@@ -73,6 +76,12 @@ export default class Note {
     this.leaf = this.plugin.app.workspace.getActiveFileView()?.leaf
     this.elements = []
     this.template = new NoteTemplate()
+    if (existNoteId) {
+      this.noteShareId = existNoteId
+    }
+    else {
+      this.noteShareId = nanoid()
+    }
   }
 
   /**
@@ -80,19 +89,14 @@ export default class Note {
    * @param key
    * @return {string} The name (key) of a frontmatter property
    */
-  field (key: YamlField): string {
+  field(key: YamlField): string {
     return this.plugin.field(key)
   }
 
-  async share () {
-    if (!this.plugin.settings.apiKey) {
-      this.plugin.authRedirect('share').then()
-      return
-    }
+  async share() {
 
     // Create a semi-permanent status notice which we can update
     this.status = new StatusMessage('If this message is showing, please do not change to another note as the current note data is still being parsed.', StatusType.Default, 60 * 1000)
-
     const startMode = this.leaf.getViewState()
     const previewMode = this.leaf.getViewState()
     previewMode.state.mode = 'preview'
@@ -315,8 +319,9 @@ export default class Note {
     this.template.mathJax = !!this.contentDom.body.innerHTML.match(/<mjx-container/)
 
     // Share the file
-    this.status.setStatus('Uploading note...')
-    let shareLink = await this.plugin.api.createNote(this.template, this.expiration)
+    this.status.setStatus('Uploading note...' + this.noteShareId)
+    this.template.themecss = new URL(this.plugin.settings.cssurl).pathname
+    let shareLink = await this.plugin.api.createNote(this.template, this.noteShareId, this.expiration)
     requestUrl(shareLink).then().catch() // Fetch the uploaded file to pull it through the cache
 
     // Add the decryption key to the share link
@@ -330,6 +335,7 @@ export default class Note {
         // Update the frontmatter with the share link
         frontmatter[this.field(YamlField.link)] = shareLink
         frontmatter[this.field(YamlField.updated)] = moment().format()
+        frontmatter[this.field(YamlField.shareId)] = this.noteShareId;
       })
       if (this.plugin.settings.clipboard || this.isForceClipboard) {
         // Copy the share link to the clipboard
@@ -350,7 +356,7 @@ export default class Note {
   /**
    * Upload media attachments
    */
-  async processMedia () {
+  async processMedia() {
     const elements = ['img', 'video']
     this.status.setStatus('Processing attachments...')
     for (const el of this.contentDom.querySelectorAll(elements.join(','))) {
@@ -383,9 +389,13 @@ export default class Note {
             hash,
             content,
             byteLength: content.byteLength,
-            expiration: this.expiration
+            expiration: this.expiration,
+            noteAttachment: true,
+            noteId: this.noteShareId
           },
-          callback: (url) => el.setAttribute('src', url)
+          callback: (url) => {
+            el.setAttribute('src', new URL(url).pathname)
+          }
         })
       }
       el.removeAttribute('alt')
@@ -397,7 +407,7 @@ export default class Note {
    * Upload theme CSS, unless this file has previously been shared,
    * or the user has requested a force re-upload
    */
-  async processCss () {
+  async processCss() {
     // Upload the main CSS file only if the user has asked for it.
     // We do it this way to ensure that the CSS the user wants on the server
     // stays that way, until they ASK to overwrite it.
@@ -429,7 +439,8 @@ export default class Note {
                   hash,
                   content: parsed.buffer,
                   byteLength: parsed.buffer.byteLength,
-                  expiration: this.expiration
+                  expiration: this.expiration,
+                  themeAsset: true
                 },
                 callback: (url) => {
                   this.css = this.css.replace(assetMatch[0], `url("${url}")`)
@@ -453,7 +464,8 @@ export default class Note {
                   hash,
                   content: contents,
                   byteLength: contents.byteLength,
-                  expiration: this.expiration
+                  expiration: this.expiration,
+                  themeAsset: true
                 },
                 callback: (url) => {
                   this.css = this.css.replace(assetMatch[0], `url("${url}")`)
@@ -464,31 +476,33 @@ export default class Note {
         }
       }
       this.status.setStatus('Uploading CSS attachments...')
+      console.log('[upload css assets]', this.css)
       await this.plugin.api.processQueue(this.status, 'CSS attachment')
       this.status.setStatus('Uploading CSS...')
       const minified = minify(this.css).css
       const cssHash = await sha1(minified)
+      const themeName = this.plugin.app?.customCss?.theme || '';
       try {
         if (cssHash !== this.cssResult?.hash) {
-          await this.plugin.api.upload({
+          let cssurl = await this.plugin.api.upload({
             filetype: 'css',
             hash: cssHash,
             content: minified,
             byteLength: minified.length,
-            expiration: this.expiration
+            expiration: this.expiration,
+            themeAsset: true,
+            themeName: themeName
           })
+          this.plugin.settings.cssurl = cssurl
+          await this.plugin.saveSettings()
         }
-
-        // Store the CSS theme in the settings
-        // @ts-ignore
-        this.plugin.settings.theme = this.plugin.app?.customCss?.theme || '' // customCss is not exposed
-        await this.plugin.saveSettings()
       } catch (e) {
+
       }
     }
   }
 
-  async querySelectorAll (view: ViewModes) {
+  async querySelectorAll(view: ViewModes) {
     const renderer = view.modes.preview.renderer
     let html = ''
     await new Promise<void>(resolve => {
@@ -524,7 +538,7 @@ export default class Note {
     return html
   }
 
-  getCalloutIcon (test: (selectorText: string) => boolean) {
+  getCalloutIcon(test: (selectorText: string) => boolean) {
     const rule = this.cssRules
       .find((rule: CSSStyleRule) => rule.selectorText && test(rule.selectorText) && rule.style.getPropertyValue('--callout-icon')) as CSSStyleRule
     if (rule) {
@@ -533,7 +547,7 @@ export default class Note {
     return ''
   }
 
-  reduceSections (sections: { el: HTMLElement }[]) {
+  reduceSections(sections: { el: HTMLElement }[]) {
     return sections.reduce((p: string, c) => p + c.el.outerHTML, '')
   }
 
@@ -542,7 +556,7 @@ export default class Note {
    * @param {string} mimeType
    * @return {string|undefined}
    */
-  extensionFromMime (mimeType: string): string | undefined {
+  extensionFromMime(mimeType: string): string | undefined {
     const mimes = cssAttachmentWhitelist
     return Object.keys(mimes).find(x => mimes[x].includes((mimeType || '').toLowerCase()))
   }
@@ -550,35 +564,35 @@ export default class Note {
   /**
    * Get the value of a frontmatter property
    */
-  getProperty (field: YamlField) {
+  getProperty(field: YamlField) {
     return this.meta?.frontmatter?.[this.plugin.field(field)]
   }
 
   /**
    * Force all related assets to upload again
    */
-  forceUpload () {
+  forceUpload() {
     this.isForceUpload = true
   }
 
   /**
    * Copy the shared link to the clipboard, regardless of the user setting
    */
-  forceClipboard () {
+  forceClipboard() {
     this.isForceClipboard = true
   }
 
   /**
    * Enable/disable encryption for the note
    */
-  shareAsPlainText (isPlainText: boolean) {
+  shareAsPlainText(isPlainText: boolean) {
     this.isEncrypted = !isPlainText
   }
 
   /**
    * Calculate an expiry datetime from the provided expiry duration
    */
-  getExpiration () {
+  getExpiration() {
     const whitelist = ['minute', 'hour', 'day', 'month']
     const expiration = this.getProperty(YamlField.expires) || this.plugin.settings.expiry
     if (expiration) {
